@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>使用canvas在前端压缩图片</title>
+    <link rel="stylesheet" href="./css/demo.css" type="text/css" />
+</head>
+
+<body>
+    <script src="https://cdn.bootcss.com/jquery/3.3.1/jquery.min.js"></script>
+    <div id="main">
+        <h1>使用canvas在前端 压缩图片 实例页面</h1>
+        <div id="body">
+            <div id="effect" class="part">
+                <h3>效果：</h3>
+                <div class="show">
+                    <div class="demo">
+                        <span>输出格式：<input type="text" placeholder="jpeg/webp才有效" id="outputType"></span>
+                        <span>输出质量：<input type="text" placeholder="默认0.92" id="outputQuality"></span>
+                        <p><input id="file" type="file" accept="image/gif, image/png, image/jpg, image/jpeg"></p>
+                        <p id="log"></p>
+                    </div>
+                </div>
+            </div>
+            <h4>原图：</h4>
+            <img id="inputImg">
+            <h4>压缩后：<a id="downloadImg" >下载</a></h4>
+            <img id="outputImg">
+        </div>
+        
+    </div>
+
+    <script>
+        // 写log方法，演示辅助，与主逻辑无关
+        var log = function (info) {
+            document.getElementById('log').innerHTML += (info + '<br>');
+        };
+        // input元素
+        var eleFile = document.querySelector('#file');
+        
+        if (window.FormData) {
+            // 压缩图片需要的一些元素和对象
+            var reader = new FileReader(), img = new Image();
+            // 选择的文件对象
+            var file = null;
+            var outputType, outputQuality;
+            // 缩放图片需要的canvas
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+
+            // 监听input上传事件
+            eleFile.addEventListener('change', function (event) {
+                outputType = $('#outputType').val() ? 'image/'+$('#outputType').val() : 'image/jpeg' ;
+                outputQuality = $('#outputQuality').val()*1 || 0.92;
+                // 拿到上传文件
+                file = event.target.files[0];
+                if (file.type.indexOf("image") == 0) {
+                    log('已选择图片：' + file.name + '，大小为：' + Math.round(1000 * file.size / (1024 * 1024)) / 1000 + 'M。');
+                    originType = file.type;
+                    // file API读取文件，拿到base64的地址信息
+                    reader.readAsDataURL(file);
+                } else {
+                    log('选择的文件非图片，到此为止。');
+                }
+            });
+
+            // 文件base64化，得到drawImage的第一个参数img
+            reader.onload = function (e) {
+                img.src = e.target.result;
+            };
+
+            // base64地址图片加载完毕后
+            img.onload = function () {
+                // 图片原始尺寸
+                var originWidth = this.width;
+                var originHeight = this.height;
+                log('图片原尺寸：' + [originWidth, originHeight].join('x'));
+                // 显示原图
+                canvas.width = originWidth;
+                canvas.height = originHeight;
+                context.drawImage(img, 0, 0, originWidth, originHeight);
+                // 原图显示到页面
+                $("#inputImg").attr('src',canvas.toDataURL(originType));
+
+                // 计算出目标压缩尺寸
+                var maxWidth = 400, maxHeight = 400;
+                // 目标尺寸
+                var targetWidth = originWidth, targetHeight = originHeight;
+                
+                // 不改变图片宽高
+                // 图片尺寸超过400x400的限制
+                // if (originWidth > maxWidth || originHeight > maxHeight) {
+                //     // 更宽，按照宽度限定尺寸
+                //     if (originWidth / originHeight > maxWidth / maxHeight) {
+                //         targetWidth = maxWidth;
+                //         targetHeight = Math.round(maxWidth * (originHeight / originWidth));
+                //     } else {
+                //         targetHeight = maxHeight;
+                //         targetWidth = Math.round(maxHeight * (originWidth / originHeight));
+                //     }
+                //     log('超过400x400的限制，图片大小限制为' + [targetWidth, targetHeight].join('x'));
+                // } else {
+                //     log('图片尺寸较小，不压缩');
+                // }
+
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                
+                // 检测图片是否有透明数据
+                // 图片过大时防止for循环过慢，压缩下画布再进行检测；压缩图片尺寸，不会影响透明度判断
+                // 图片压缩到10X10
+                context.clearRect(0, 0, targetWidth, targetHeight);
+                context.drawImage(img, 0, 0, 10, 10);
+                var imageData = context.getImageData(0, 0, 10, 10).data;
+                var isAlphaBackground = false;
+                // rgba四个一组，a等于0就是透明
+                for (var index = 3; index < imageData.length; index += 4) {
+                    if (imageData[index] == 0) {
+                        isAlphaBackground = true;
+                        break;    
+                    }
+                }
+                // 图片有透明的话，用原格式
+                // TODO 抽取代码做一个新的函数
+                if(isAlphaBackground){
+                    outputType = originType;
+                    // 用原始宽高再画一次
+                    context.clearRect(0, 0, targetWidth, targetHeight);
+                    context.drawImage(img, 0, 0, targetWidth, targetHeight);
+                    // 将压缩后的图片显示到页面
+                    $("#outputImg").attr('src',canvas.toDataURL(outputType, outputQuality));
+                    // 设置下载链接
+                    $("#downloadImg").attr('href',canvas.toDataURL(outputType, outputQuality));
+                    var fileName = outputType.split('/')[1];
+                    $("#downloadImg").attr('download',`${outputQuality}${fileName}压缩.${fileName}`);
+                }else{
+                    context.clearRect(0, 0, targetWidth, targetHeight);
+                    context.drawImage(img, 0, 0, targetWidth, targetHeight);
+                    // 将压缩后的图片显示到页面
+                    $("#outputImg").attr('src',canvas.toDataURL(outputType, outputQuality));
+                    // 设置下载链接
+                    $("#downloadImg").attr('href',canvas.toDataURL(outputType, outputQuality));
+                    var fileName = outputType.split('/')[1];
+                    $("#downloadImg").attr('download',`${outputQuality}${fileName}压缩.${fileName}`);
+                }
+            };
+        }
+    </script>
+
+</body>
+
+</html>
